@@ -22,16 +22,23 @@ def get_games(game):
     return ast.literal_eval(closest_games.loc[skv].values[0][0])
 
 
-def generate_results_table(search_title, search_range = 20):
+def generate_results_table(search_title, tag_filters = [], search_range = 20):
+    
     st.title(f'Titles most similar to {search_title}')
     results = get_games(search_title.lower())
-    results_df = games.loc[results[:search_range], output_columns]
+    results_df = games.loc[results]
+    
+    if len(tag_filters) > 0:
+        for tag in tag_filters:
+            results_df = results_df[results_df[tag] > 0]
+    
     results_df['name'] = [f'<a href = https://store.steampowered.com/app/{results[y]}>{games.loc[results[y], "name"]}</a>' for y in range(len(results_df))]
     results_df['price'] = [f'${price}' for price in results_df['price']]
-    results_df = results_df.set_index('name')
+    results_df['pos_rating_pct'] = (results_df['pos_rating_pct']*100).astype('int32')
+    results_df = results_df.loc[ : , output_columns].iloc[:min(len(results_df), search_range)].set_index('name')
     results_df.index.name = None
     results_df = results_df.to_html(escape=False)
-    results_df = results_df.replace('<th></th>','<th>name</th>').replace('<tr style="text-align: right;">', '<tr style="text-align: left;">')
+    results_df = results_df.replace('<th></th>','<th>name</th>').replace('<tr style="text-align: right;">', '<tr style="text-align: left;">').replace('pos_rating_pct','average rating /100')
     
     st.write(results_df, unsafe_allow_html=True)
 
@@ -54,47 +61,47 @@ def generate_game_info(game_title):
         info_columns[0].write('Thumbnail not available')
     
     for x in range(len(output_columns)):
-        info_columns[x+1].write(f'{output_columns[x]}'.title())
+        if output_columns[x] != 'pos_rating_pct':
+            info_columns[x+1].write(f'{output_columns[x]}'.title())
+        else:
+            info_columns[x+1].write('Average Rating /100')
+            
         if output_columns[x] == 'name':
             info_columns[x+1].write(f'[{games.loc[search_key_values, output_columns[x]].values[0]}](https://store.steampowered.com/app/{search_keys.loc[game_title.lower()].values[0]})')
         elif output_columns[x] == 'price':
             info_columns[x+1].write(f'${games.loc[search_key_values, output_columns[x]].values[0]}')
+        elif output_columns[x] == 'pos_rating_pct':
+            info_columns[x+1].write(f'{int(games.loc[search_key_values, output_columns[x]].values[0]*100)}')
         else:
             info_columns[x+1].write(f'{games.loc[search_key_values, output_columns[x]].values[0]}')
 
-page = st.sidebar.selectbox('Select a Page', ('Seach Games', 'About'))
 
-if page == 'Seach Games':
-    st.title('Search for Games on Steam')
-    search_method = st.selectbox('Seach by:', ('Game Name', 'Attributes'))
-    
-    if search_method == 'Game Name':
-        search = st.text_input('Search for a game', value='Beat Hazard').lower()
-        search_titles = list(search_keys[search_keys.index.str.contains(search)].index)
-        
-        if len(search_titles) < 1:
-            st.write('Unable to find any game titles like that one. Try a different search!')
-        else:
-            game_titles = list(set(list(games.loc[search_keys.loc[search_titles]['appid']]['name'].values)))
-            game_titles.sort()
-            
-            st.write(f'Titles names that are similar to your search:')
-            choice_cols = st.columns(min(10, len(game_titles)))
-            
-            for i in range(len(game_titles)):
-                if choice_cols[i%10].button(f'{game_titles[i]}'):
-                    generate_game_info(game_titles[i])
-                    generate_results_table(game_titles[i])
-                
-    
-    if search_method == 'Attributes':
-        search_cols = st.columns(4)
-        devel = search_cols[0].checkbox('Developer')
-        genre = search_cols[1].checkbox('Genre')
-        tags = search_cols[2].checkbox('Tags')
-        langs = search_cols[3].checkbox('Languages')
-        
+st.title('Search for Games on Steam')
+search = st.text_input('Search for a game', value='Beat Hazard').lower()
 
-if page == 'About':
-    st.title('Recommend Me a Game on Steam')
-    st.write('Search games by genre, developer, tags and more!')
+filters = []
+if st.checkbox('Filter by Tags?'):
+    popular_tags = list(games.loc[:,'1980s':'e-sports'].sum().sort_values(ascending=False).index)
+    tag_filter_count = st.slider('Choose number of tags to display (listed in order of how commonly they are used)', min_value=12, max_value = len(popular_tags))
+    check_cols = st.columns(6)
+    for box in range(tag_filter_count):
+        if check_cols[box%6].checkbox(popular_tags[box]):
+            filters.append(popular_tags[box])
+else:
+    filters = []
+            
+search_titles = list(search_keys[search_keys.index.str.contains(search)].index)
+    
+if len(search_titles) < 1:
+    st.write('Unable to find any game titles like that one. Try a different search!')
+else:
+    game_titles = list(set(list(games.loc[search_keys.loc[search_titles]['appid']]['name'].values)))
+    game_titles.sort()
+        
+    st.write(f'Titles names that are similar to your search:')
+    choice_cols = st.columns(min(10, len(game_titles)))
+        
+    for i in range(len(game_titles)):
+        if choice_cols[i%10].button(f'{game_titles[i]}'):
+            generate_game_info(game_titles[i])
+            generate_results_table(game_titles[i], filters)
