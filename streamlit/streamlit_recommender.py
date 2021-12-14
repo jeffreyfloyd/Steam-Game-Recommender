@@ -12,8 +12,12 @@ search_keys = pd.read_csv(dir_path+'/data/search_keys.csv').set_index('name')
 closest_games = pd.read_csv(dir_path+'/data/top100_simils.csv').set_index('Unnamed: 0')
 output_columns = ['name', 'developer', 'genre', 'tags', 'languages', 'pos_rating_pct', 'owners','price']
 
-st.set_page_config(page_title = 'Steam Game Recommender', layout = 'wide')
+filter_explicit = True
+explicit_genres = ['genre_Nudity','genre_Sexual Content']
+explicit_tags = ['Hentai','NSFW','Nudity','Sexual Content']
 
+st.set_page_config(page_title = 'Steam Game Recommender', layout = 'wide')
+#st.image(dir_path+'/streamlit/images/SteamBanner1-p.png')
 
 def get_games(game):
     skv = search_keys.loc[game]
@@ -22,15 +26,19 @@ def get_games(game):
     return ast.literal_eval(closest_games.loc[skv].values[0][0])
 
 
-def generate_results_table(search_title, tag_filters = [], search_range = 20):
+def generate_results_table(search_title, game_filts = [], search_range = 20):
     
     st.title(f'Titles most similar to {search_title}')
     results = get_games(search_title.lower())
     results_df = games.loc[results]
-    
-    if len(tag_filters) > 0:
-        for tag in tag_filters:
-            results_df = results_df[results_df[tag] > 0]
+                 
+    if filter_explicit:
+        for expl_filt in (explicit_genres + explicit_tags):
+            results_df = results_df[results_df[expl_filt] == 0]
+        
+    if len(game_filts) > 0:
+        for filt in game_filts:
+            results_df = results_df[results_df[filt] > 0]
     
     results_df['name'] = [f'<a href = https://store.steampowered.com/app/{results[y]}>{games.loc[results[y], "name"]}</a>' for y in range(len(results_df))]
     results_df['price'] = [f'${price}' for price in results_df['price']]
@@ -76,32 +84,106 @@ def generate_game_info(game_title):
             info_columns[x+1].write(f'{games.loc[search_key_values, output_columns[x]].values[0]}')
 
 
-st.title('Search for Games on Steam')
-search = st.text_input('Search for a game', value='Beat Hazard').lower()
+st.title('Steam Game Recommendation Engine')
+st.write('How many times have you used the search function on the Steam store and found that many of its suggestions have little to no similarity to the game you\'re insterested in? This app is designed to help you find more of the games you didn\'t know you wanted to play. \
+Search your favorite games in your Steam library so you can find more of what you love!')
+st.write('')
 
-filters = []
-if st.checkbox('Filter by Tags?'):
-    popular_tags = list(games.loc[:,'1980s':'e-sports'].sum().sort_values(ascending=False).index)
-    tag_filter_count = st.slider('Choose number of tags to display (listed in order of how commonly they are used)', min_value=12, max_value = len(popular_tags))
-    check_cols = st.columns(6)
-    for box in range(tag_filter_count):
-        if check_cols[box%6].checkbox(popular_tags[box]):
-            filters.append(popular_tags[box])
+
+search = st.text_input('Search for a game', value='Beat Hazard').lower()
+if len(search) < 1:
+    st.write('Please enter a game name to search')
+
 else:
     filters = []
-            
-search_titles = list(search_keys[search_keys.index.str.contains(search)].index)
+    filter_columns = st.columns([2,1,1,1,1,1,1,1,1,1,1,1])
     
-if len(search_titles) < 1:
-    st.write('Unable to find any game titles like that one. Try a different search!')
-else:
-    game_titles = list(set(list(games.loc[search_keys.loc[search_titles]['appid']]['name'].values)))
-    game_titles.sort()
+    if filter_columns[0].checkbox('Filter results to require certain tags?'):
+    
+#        if filter_columns[2].checkbox('by Tags'):
+        tag_check_cols = st.columns(10)
+        tag_filter = filter_columns[1].selectbox('Order by', ('Most Common','Alphabetical'))
+        if tag_filter == 'Most Common':
+            tags_list = list(games.loc[:,'1980s':'e-sports'].sum().sort_values(ascending=False).index)
+            tag_filter_count = filter_columns[2].selectbox('Number to Display', ('20', '50', '100', '200', 'all'))
+        else:
+            tags_list = []
+            if filter_columns[2].checkbox('0-9'):
+                tags_list += list(games.loc[:, '1980s' : '8-bit Music'].columns)
+            if filter_columns[2].checkbox('A-F'):
+                tags_list += list(games.loc[:, 'ATV' : 'Futuristic'].columns)
+            if filter_columns[2].checkbox('G-K'):
+                tags_list += list(games.loc[:, 'Gambling' : 'Kickstarter'].columns)
+            if filter_columns[3].checkbox('L-P'):
+                tags_list += list(games.loc[:, 'LEGO' : 'PvP'].columns)
+            if filter_columns[3].checkbox('Q-U'):
+                tags_list += list(games.loc[:, 'Quick-Time Events' : 'Utilities'].columns)
+            if filter_columns[3].checkbox('V-Z'):
+                tags_list += list(games.loc[:, 'VR' : 'e-sports'].columns)
+            
+            tag_filter_count = len(tags_list)
+            
+        if filter_explicit:
+            for tag in explicit_tags:
+                try:
+                    tags_list.remove(tag)
+                    tag_filter_count -= 1
+                except:
+                    pass
+            
+        #tag_filter_count = filter_columns[2].selectbox('Number to Display', ('20','50','100','all'))
+        if tag_filter_count != 'all':
+            tag_filter_count = int(tag_filter_count)
+        else:
+            tag_filter_count = len(tags_list)
         
-    st.write(f'Titles names that are similar to your search:')
-    choice_cols = st.columns(min(10, len(game_titles)))
+        st.write('Tags:')
+        tag_check_cols = st.columns(10)
+        for box in range(tag_filter_count):
+            if tag_check_cols[box%10].checkbox(tags_list[box]):
+                filters.append(tags_list[box])
+            else:
+                try:
+                    filters.remove(tags_list[box])
+                except:
+                    pass
         
-    for i in range(len(game_titles)):
-        if choice_cols[i%10].button(f'{game_titles[i]}'):
-            generate_game_info(game_titles[i])
-            generate_results_table(game_titles[i], filters)
+#         if filter_columns[1].checkbox('by Genre'):
+#             genre_list = [col for col in games.columns if 'genre_' in col]
+#             if filter_explicit:
+#                 for genre in explicit_genres:
+#                     genre_list.remove(genre)
+
+#             st.write('Genres:')
+#             genre_check_cols = st.columns(10)
+#             for box in range(len(genre_list)):
+#                 if genre_check_cols[box%10].checkbox(genre_list[box][6:]):
+#                     filters.append(genre_list[box])
+#                 else:
+#                     try:
+#                         filters.remove(genre_list[box])
+#                     except:
+#                         pass
+    
+    
+
+    else:
+        filters = []
+
+    search_titles = list(search_keys[search_keys.index.str.contains(search)].index)
+    
+    if len(search_titles) < 1:
+        st.write('Unable to find any game titles like that one. Try a different search!')
+
+    else:
+        game_titles = list(set(list(games.loc[search_keys.loc[search_titles]['appid']]['name'].values)))
+        game_titles.sort()
+        
+        st.write(f'Titles names that are similar to your search:')
+        choice_cols = st.columns(10)
+        
+        for i in range(len(game_titles)):
+            if choice_cols[i%10].button(f'{game_titles[i]}'):
+                generate_game_info(game_titles[i])
+                
+                generate_results_table(game_titles[i], filters)
