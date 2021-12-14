@@ -10,7 +10,7 @@ dir_path = os.getcwd().replace('\\','/')
 games = pd.concat([pd.read_csv(dir_path+'/data/steam_games_cleaned_1.csv'), pd.read_csv(dir_path+'/data/steam_games_cleaned_2.csv'), pd.read_csv(dir_path+'/data/steam_games_cleaned_3.csv')], axis=0).set_index('appid')
 search_keys = pd.read_csv(dir_path+'/data/search_keys.csv').set_index('name')
 closest_games = pd.read_csv(dir_path+'/data/top100_simils.csv').set_index('Unnamed: 0')
-output_columns = ['name', 'developer', 'genre', 'tags', 'languages', 'price']
+output_columns = ['name', 'developer', 'genre', 'tags', 'languages', 'pos_rating_pct', 'owners','price']
 
 st.set_page_config(page_title = 'Steam Game Recommender', layout = 'wide')
 
@@ -84,7 +84,7 @@ if page == 'Seach Games':
             for i in range(len(game_titles)):
                 if choice_cols[i%10].button(f'{game_titles[i]}'):
                     generate_game_info(game_titles[i])
-                    generate_results_table(search)
+                    generate_results_table(game_titles[i])
                 
     
     if search_method == 'Attributes':
